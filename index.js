@@ -31,66 +31,71 @@ const exerciseSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 const Exercise = mongoose.model('Exercise', exerciseSchema);
 
-app.post('/api/users', (req, res) => {
-  const name = req.body.username;
-  User.findOne({username: name})
-  .then(doc => {
-    if(doc)
-      res.json({username: doc.username, _id: doc._id});
+app.post('/api/users', async (req, res) => {
+  const name = req.body.username.trim();
+  if(name == '')
+    res.json({error: "Please enter a username"});
+  else {
+    const user = await User.findOne({username: name});
+    if(user)
+      res.json({username: user.username, _id: user._id});
     else {
-      new User({username: name}).save()
-      .then(nDoc => {
-        res.json({username: nDoc.username, _id: nDoc._id});
-      }, (err) => {
-        res.send(err);
-      });
+      const nUser = await new User({username: name}).save();
+      res.json({username: nUser.username, _id: nUser._id});
     }
-  });
+  }
 });
 
-app.get('/api/users', (req, res) => {
-  User.find().then(users => {
-    res.send(users);
-  });
+app.get('/api/users', async(req, res) => {
+  res.send(await User.find());
 });
 
-app.post('/api/users/:_id/exercises', (req, res) => {
-  User.findOne({_id: req.params._id}).then(doc => {
-    if(!doc)
-      res.json({error: "User does not exist"});
-    else {
-      var date = req.body.date.trim();
-      new Exercise({
+app.post('/api/users/:_id/exercises', async (req, res) => {
+  const user = await User.findById(req.params._id);
+  if(!user)
+    res.json({error: "User does not exist"});
+  else {
+    try {
+      let date = req.body.date;
+      const exercise = await new Exercise({
         user_id: req.params._id,
         description: req.body.description,
         duration: req.body.duration,
         date: date == '' ? new Date() : new Date(date)
-      }).save()
-      .then(nDoc => {
-        res.json({_id: doc._id, username: doc.username, date: nDoc.date.toDateString(), duration: nDoc.duration, description: nDoc.description});
-      }, err => {
-        res.send(err);
-      })
+      }).save();
+      res.json({_id: user._id, username: user.username, date: exercise.date.toDateString(), duration: exercise.duration, description: exercise.description});
     }
-  })
+    catch (err) {
+      res.send(err);
+    }
+  }
 });
 
-app.get('/api/users/:_id/logs', (req, res) => {
-  User.findById(req.params._id)
-  .then(user => {
-    Exercise.where({user_id: user._id}).countDocuments()
-    .then(count => {
-      Exercise.find({user_id: user._id})
-      .then(docs => {
-        let mappedDocs = docs.map(e => ({
-          description: e.description,
-          duration: e.duration,
-          date: e.date.toDateString()
-        }));
-        res.json({_id: user._id, username: user.username, count: count, log: mappedDocs});
-      });
-    });
-  });
+app.get('/api/users/:_id/logs', async (req, res) => {
+  const from = req.query.from;
+  const to = req.query.to;
+  const limit = req.query.limit;
+  var dateObj = {};
+  if(from)
+    dateObj['$gte'] = new Date(from);
+  if(to)
+    dateObj['$lte'] = new Date(to);
+  
+  const user = await User.findById(req.params._id);
+  if (!user)
+    res.json({error: "User does not exist"});
+  else {
+    var excFilter = {user_id: user._id};
+    if(from || to)
+      excFilter.date = dateObj;
+    const exercises = await Exercise.find(excFilter).limit(limit);
+    let log = exercises.map(e => ({
+      description: e.description,
+      duration: e.duration,
+      date: e.date.toDateString()
+    }));
+    res.json({_id: user._id, username: user.username, count: exercises.length, log});
+  }
 });
 
 const listener = app.listen(process.env.PORT || 3000, () => {
