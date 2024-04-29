@@ -33,7 +33,7 @@ const Exercise = mongoose.model('Exercise', exerciseSchema);
 
 app.post('/api/users', async (req, res) => {
   const name = req.body.username.trim();
-  if(name == '')
+  if(!name || name == '')
     res.json({error: "Please enter a username"});
   else {
     const user = await User.findOne({username: name});
@@ -56,12 +56,12 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
     res.json({error: "User does not exist"});
   else {
     try {
-      let date = req.body.date;
+      const date = req.body.date;
       const exercise = await new Exercise({
         user_id: req.params._id,
         description: req.body.description,
         duration: req.body.duration,
-        date: date == '' ? new Date() : new Date(date)
+        date: !date || date.trim() == '' ? new Date() : new Date(date.trim())
       }).save();
       res.json({_id: user._id, username: user.username, date: exercise.date.toDateString(), duration: exercise.duration, description: exercise.description});
     }
@@ -80,7 +80,6 @@ app.get('/api/users/:_id/logs', async (req, res) => {
     dateObj['$gte'] = new Date(from);
   if(to)
     dateObj['$lte'] = new Date(to);
-  
   const user = await User.findById(req.params._id);
   if (!user)
     res.json({error: "User does not exist"});
