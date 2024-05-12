@@ -1,26 +1,19 @@
+require('dotenv').config()
 const express = require('express')
 const app = express()
 const cors = require('cors')
-require('dotenv').config()
+const mongoose = require('mongoose')
 
 app.use(cors())
+app.use(express.urlencoded({extended: true}))
 app.use(express.static('public'))
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/views/index.html')
-});
-
-
-// My code
-const mongoose = require('mongoose');
-const { use } = require('express/lib/application')
 
 mongoose.connect(process.env.MONGO_URI);
-
-app.use(express.urlencoded({extended: true}));
 
 const userSchema = new mongoose.Schema({
   username: {type: String, required: true, unique: true}
 });
+
 const exerciseSchema = new mongoose.Schema({
   user_id: {type: String, required: true},
   description: {type: String, required: true},
@@ -31,6 +24,16 @@ const exerciseSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 const Exercise = mongoose.model('Exercise', exerciseSchema);
 
+const listener = app.listen(process.env.PORT || 3000, () => {
+  console.log('Your app is listening on port ' + listener.address().port)
+});
+
+// front page
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/views/index.html')
+});
+
+// create or fetch user
 app.post('/api/users', async (req, res) => {
   const name = req.body.username.trim();
   if(!name || name == '')
@@ -40,16 +43,18 @@ app.post('/api/users', async (req, res) => {
     if(user)
       res.json({username: user.username, _id: user._id});
     else {
-      const nUser = await new User({username: name}).save();
-      res.json({username: nUser.username, _id: nUser._id});
+      const newUser = await new User({username: name}).save();
+      res.json({username: newUser.username, _id: newUser._id});
     }
   }
 });
 
+// list all users
 app.get('/api/users', async(req, res) => {
   res.send(await User.find());
 });
 
+// create an exercise for a user
 app.post('/api/users/:_id/exercises', async (req, res) => {
   const user = await User.findById(req.params._id);
   if(!user)
@@ -61,9 +66,15 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
         user_id: req.params._id,
         description: req.body.description,
         duration: req.body.duration,
-        date: !date || date.trim() == '' ? new Date() : new Date(date.trim())
+        date: (!date || date.trim() == '') ? new Date() : new Date(date.trim())
       }).save();
-      res.json({_id: user._id, username: user.username, date: exercise.date.toDateString(), duration: exercise.duration, description: exercise.description});
+      res.json({
+        _id: user._id,
+        username: user.username,
+        date: exercise.date.toDateString(),
+        duration: exercise.duration,
+        description: exercise.description
+      });
     }
     catch (err) {
       res.send(err);
@@ -71,6 +82,7 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
   }
 });
 
+// fetch a user's exercises
 app.get('/api/users/:_id/logs', async (req, res) => {
   const from = req.query.from;
   const to = req.query.to;
@@ -95,8 +107,4 @@ app.get('/api/users/:_id/logs', async (req, res) => {
     }));
     res.json({_id: user._id, username: user.username, count: exercises.length, log});
   }
-});
-
-const listener = app.listen(process.env.PORT || 3000, () => {
-  console.log('Your app is listening on port ' + listener.address().port)
 });
